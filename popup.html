@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Gemini Folders</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #1f1f1f;
+        --dim: #5f6368;
+        --bg: #ffffff;
+        --bg-2: #f1f3f4;
+        --border: rgba(0, 0, 0, 0.15);
+        --accent: #1967d2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e3e3e3;
+          --dim: #9aa0a6;
+          --bg: #1e1f20;
+          --bg-2: #282a2c;
+          --border: rgba(255, 255, 255, 0.15);
+          --accent: #8ab4f8;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        width: 280px;
+        margin: 0;
+        padding: 14px;
+        font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .stats {
+        margin-bottom: 12px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: var(--bg-2);
+        color: var(--dim);
+        font-size: 12px;
+      }
+      .row { display: flex; gap: 8px; }
+      button {
+        flex: 1;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg-2);
+        color: var(--fg);
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover { border-color: var(--accent); color: var(--accent); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .msg {
+        margin: 10px 0 0;
+        min-height: 16px;
+        font-size: 12px;
+        color: var(--dim);
+      }
+      .msg.error { color: #d93025; }
+      p.note {
+        margin: 12px 0 0;
+        font-size: 11px;
+        color: var(--dim);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Gemini Folders</h1>
+    <div class="stats" id="stats">Cargando…</div>
+    <div class="row">
+      <button id="export" type="button">Exportar copia</button>
+      <button id="import" type="button">Importar copia</button>
+    </div>
+    <input id="file" type="file" accept="application/json,.json" hidden />
+    <p class="msg" id="msg"></p>
+    <p class="note">
+      Exporta un JSON con tus carpetas y chats para usarlos en otra computadora.
+      Al importar, lo que viene del archivo se fusiona con lo que ya tienes.
+    </p>
+
+    <script src="lib.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

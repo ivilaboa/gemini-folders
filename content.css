@@ -1,0 +1,344 @@
+/* Gemini Folders — estilos del panel inyectado en el sidebar.
+   Todo va prefijado con `gf-` y usa variables con fallback para no depender
+   de los tokens internos de Gemini (que cambian entre versiones).
+
+   Las variables viven en :root porque el menú contextual, el botón flotante y
+   el launcher se cuelgan de <body>, fuera de #gf-root. */
+
+:root {
+  --gf-fg: #e3e3e3;
+  --gf-fg-dim: #9aa0a6;
+  --gf-bg: #1e1f20;
+  --gf-bg-2: #282a2c;
+  --gf-hover: rgba(255, 255, 255, 0.08);
+  --gf-active: rgba(255, 255, 255, 0.14);
+  --gf-accent: #8ab4f8;
+  --gf-border: rgba(255, 255, 255, 0.12);
+  --gf-row-h: 32px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --gf-fg: #1f1f1f;
+    --gf-fg-dim: #5f6368;
+    --gf-bg: #ffffff;
+    --gf-bg-2: #f1f3f4;
+    --gf-hover: rgba(0, 0, 0, 0.06);
+    --gf-active: rgba(0, 0, 0, 0.11);
+    --gf-accent: #1967d2;
+    --gf-border: rgba(0, 0, 0, 0.12);
+  }
+}
+
+#gf-root,
+#gf-fallback {
+  box-sizing: border-box;
+  color: var(--gf-fg, #e3e3e3);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+#gf-root *,
+#gf-fallback * {
+  box-sizing: border-box;
+}
+
+/* ---------------------------------------------------------------- panel */
+
+#gf-root {
+  max-height: 40vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 8px 8px;
+  margin: 4px 0;
+  border-bottom: 1px solid var(--gf-border, rgba(255, 255, 255, 0.12));
+}
+
+#gf-fallback {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2147483000;
+  width: 280px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px 8px 8px;
+  background: var(--gf-bg, #1e1f20);
+  border: 1px solid var(--gf-border, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+/* --------------------------------------------------------------- header */
+
+.gf-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0 6px;
+  position: sticky;
+  top: -4px;
+  background: var(--gf-bg, #1e1f20);
+  z-index: 2;
+}
+
+.gf-title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gf-fg-dim, #9aa0a6);
+}
+
+.gf-btn,
+.gf-kebab,
+.gf-twisty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--gf-fg-dim, #9aa0a6);
+  cursor: pointer;
+  padding: 0;
+}
+
+.gf-btn {
+  width: 26px;
+  height: 26px;
+}
+
+.gf-btn:hover,
+.gf-kebab:hover,
+.gf-twisty:hover {
+  background: var(--gf-hover, rgba(255, 255, 255, 0.08));
+  color: var(--gf-fg, #e3e3e3);
+}
+
+.gf-btn svg,
+.gf-kebab svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* ----------------------------------------------------------------- rows */
+
+.gf-node:focus-visible {
+  outline: 2px solid var(--gf-accent, #8ab4f8);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+.gf-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--gf-row-h, 32px);
+  padding: 2px 6px 2px 2px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.gf-row:hover {
+  background: var(--gf-hover, rgba(255, 255, 255, 0.08));
+}
+
+.gf-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.gf-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.gf-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gf-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--gf-fg-dim, #9aa0a6);
+  background: var(--gf-bg-2, #282a2c);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.gf-twisty {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.gf-twisty svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.12s ease;
+}
+
+.gf-twisty.gf-open svg {
+  transform: rotate(90deg);
+}
+
+.gf-kebab {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+}
+
+.gf-row:hover .gf-kebab,
+.gf-node:focus-within .gf-kebab {
+  opacity: 1;
+}
+
+.gf-folder .gf-name {
+  font-weight: 500;
+}
+
+.gf-chat {
+  padding-left: 6px;
+  color: var(--gf-fg-dim, #9aa0a6);
+}
+
+.gf-chat:hover {
+  color: var(--gf-fg, #e3e3e3);
+}
+
+.gf-chat .gf-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.gf-section {
+  color: var(--gf-fg-dim, #9aa0a6);
+  font-weight: 500;
+}
+
+.gf-children {
+  display: block;
+  padding-left: 14px;
+}
+
+/* ------------------------------------------------------------ drop state */
+
+.gf-drop {
+  background: var(--gf-active, rgba(255, 255, 255, 0.14));
+  box-shadow: inset 0 0 0 1px var(--gf-accent, #8ab4f8);
+}
+
+/* ------------------------------------------------------- assign button */
+
+.gf-assign {
+  position: fixed;
+  z-index: 2147483001;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--gf-bg-2, #282a2c);
+  color: var(--gf-fg, #e3e3e3);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+.gf-assign:hover {
+  background: var(--gf-active, rgba(255, 255, 255, 0.14));
+  color: var(--gf-accent, #8ab4f8);
+}
+
+.gf-assign svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ---------------------------------------------------------------- menus */
+
+.gf-menu {
+  position: fixed;
+  z-index: 2147483002;
+  min-width: 190px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--gf-bg-2, #282a2c);
+  border: 1px solid var(--gf-border, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  color: var(--gf-fg, #e3e3e3);
+}
+
+.gf-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gf-menu-item:hover:not(:disabled) {
+  background: var(--gf-active, rgba(255, 255, 255, 0.14));
+}
+
+.gf-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+/* ------------------------------------------------------- status / misc */
+
+.gf-status {
+  margin-top: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--gf-fg-dim, #9aa0a6);
+}
+
+.gf-launcher {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2147483000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--gf-border, rgba(255, 255, 255, 0.12));
+  border-radius: 50%;
+  background: var(--gf-bg-2, #282a2c);
+  color: var(--gf-fg, #e3e3e3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+.gf-launcher svg {
+  width: 19px;
+  height: 19px;
+}
