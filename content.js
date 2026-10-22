@@ -162,6 +162,13 @@
 
   const chatUrl = (id) => `https://gemini.google.com/app/${id}`;
 
+  /** URL del chat abierto: los "gems" no cuelgan de /app/. */
+  function currentUrl() {
+    const p = location.pathname;
+    if (p.startsWith('/app/') || p.startsWith('/gem/')) return `https://gemini.google.com${p}`;
+    return chatUrl(chatIdFromPath(p) || '');
+  }
+
   // =====================================================================
   // Persistencia
   // =====================================================================
@@ -245,7 +252,7 @@
     }
     const current = chatIdFromPath(location.pathname);
     if (current && !found.has(current)) {
-      found.set(current, { title: pageTitle(), url: chatUrl(current) });
+      found.set(current, { title: pageTitle(), url: currentUrl() });
     }
     return found;
   }
@@ -371,8 +378,22 @@
     // El chat no está en el DOM: Gemini sólo enruta si primero "soltamos" el chat actual.
     const newChat = $(SEL.newChat);
     if (newChat) activate(newChat);
-    history.pushState({}, '', `/app/${chatId}`);
+    history.pushState({}, '', pathOf(chatId));
     dispatchEvent(new PopStateEvent('popstate'));
+  }
+
+  /** Ruta a la que navegar para un chat (los gems no cuelgan de /app/). */
+  function pathOf(chatId) {
+    const stored = state.chats[chatId] && state.chats[chatId].url;
+    if (stored) {
+      try {
+        const u = new URL(stored);
+        if (u.origin === location.origin && u.pathname.startsWith('/')) return u.pathname;
+      } catch {
+        /* URL guardada inválida: caemos a /app/<id> */
+      }
+    }
+    return `/app/${chatId}`;
   }
 
   // =====================================================================
