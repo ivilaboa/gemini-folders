@@ -12,15 +12,23 @@
         background: #1e1f20;
         color: #e3e3e3;
       }
-      /* --- mock del sidebar de Gemini --- */
+      /* --- mock del sidebar de Gemini (estructura real verificada con probe.js) ---
+         bard-sidenav > side-navigation-content > .sidenav-with-history-container
+           > .sidenav-header-buttons + .overflow-container > infinite-scroller */
       bard-sidenav {
         display: flex;
         flex-direction: column;
-        width: 320px;
+        width: 288px;
         height: 100vh;
         background: #1e1f20;
         border-right: 1px solid #3c4043;
-        overflow-y: auto;
+        overflow: hidden;
+      }
+      side-navigation-content {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
       }
       .sidenav-with-history-container {
         display: flex;
@@ -28,34 +36,39 @@
         flex: 1;
         min-height: 0;
       }
-      .overflow-container { padding: 8px; }
-      gem-nav-list-item a {
-        display: block;
-        padding: 8px;
-        color: #9aa0a6;
-        text-decoration: none;
+      .sidenav-header-buttons {
+        flex: 0 0 auto;
+        height: 36px;
+        padding: 4px 8px;
+        box-sizing: border-box;
       }
-      .recent-conversations-container {
+      .overflow-container {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      infinite-scroller {
         flex: 1;
         min-height: 0;
         overflow-y: auto;
-        padding: 4px 8px;
       }
-      [data-test-id='conversation'] {
-        display: flex;
-        align-items: center;
-        border-radius: 8px;
-      }
+      gem-nav-list-item a,
       [data-test-id='conversation'] > a {
-        flex: 1;
+        display: block;
         padding: 8px;
-        color: #e3e3e3;
+        color: #9aa0a6;
         text-decoration: none;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      main { flex: 1; padding: 24px; }
+      [data-test-id='conversation'] {
+        display: flex;
+        align-items: center;
+      }
+      main { flex: 1; padding: 24px; min-width: 0; }
+      main infinite-scroller { height: 300px; }
       .hint { color: #9aa0a6; max-width: 60ch; }
       code { background: #282a2c; padding: 1px 4px; border-radius: 4px; }
     </style>
@@ -63,20 +76,32 @@
   </head>
   <body>
     <bard-sidenav>
-      <div class="overflow-container">
-        <gem-nav-list-item><a href="/app">Nueva conversación</a></gem-nav-list-item>
-      </div>
-      <div class="sidenav-with-history-container">
-        <div class="recent-conversations-container">
-          <div data-test-id="conversation"><a href="/app/aaa111">Cómo cocer arroz</a></div>
-          <div data-test-id="conversation"><a href="/app/bbb222">Proyecto ATLAS · hace 3 días</a></div>
-          <div data-test-id="conversation"><a href="/app/ccc333">Ideas para el viaje</a></div>
-          <div data-test-id="conversation"><a href="/app/ddd444">Resumen del libro</a></div>
-          <div data-test-id="conversation"><a href="/app/eee555">Plan de trabajo Q4</a></div>
+      <side-navigation-content>
+        <div class="sidenav-with-history-container expanded">
+          <div class="sidenav-header-buttons"><button type="button">☰</button></div>
+          <div class="overflow-container" data-test-id="overflow-container">
+            <infinite-scroller class="lr26-theme">
+              <gem-nav-list-item><a href="/app">Nueva conversación</a></gem-nav-list-item>
+              <div data-test-id="conversation" class="always-show-hovered-trailing-content">
+                <a class="mat-mdc-list-item gem-nav-list-item" href="/app/aaa111?utm_medium=product_promo">Cómo cocer arroz</a>
+              </div>
+              <div data-test-id="conversation" class="always-show-hovered-trailing-content">
+                <a class="mat-mdc-list-item gem-nav-list-item" href="/app/bbb222?utm_medium=product_promo">Proyecto ATLAS · hace 3 días</a>
+              </div>
+              <div data-test-id="conversation" class="always-show-hovered-trailing-content">
+                <a class="mat-mdc-list-item gem-nav-list-item" href="/app/ccc333">Ideas para el viaje</a>
+              </div>
+              <div data-test-id="conversation" class="always-show-hovered-trailing-content">
+                <a class="mat-mdc-list-item gem-nav-list-item" href="/app/ddd444">Resumen del libro</a>
+              </div>
+              <div data-test-id="conversation" class="always-show-hovered-trailing-content">
+                <a class="mat-mdc-list-item gem-nav-list-item" href="/app/eee555">Plan de trabajo Q4</a>
+              </div>
+            </infinite-scroller>
+          </div>
         </div>
-      </div>
+      </side-navigation-content>
     </bard-sidenav>
-
     <main>
       <h1>Selftest de Gemini Folders</h1>
       <p class="hint">
@@ -85,10 +110,20 @@
         chat dentro y recárgala: todo debe persistir.
       </p>
       <p class="hint">
+        El mock reproduce el DOM real de Gemini (vía <code>tools/probe.js</code>):
+        <code>bard-sidenav &gt; side-navigation-content &gt; .sidenav-with-history-container &gt;
+        .overflow-container &gt; infinite-scroller</code>. El segundo
+        <code>infinite-scroller</code> (abajo) imita el historial del chat en
+        <code>main</code> para comprobar que no se confunden.
+      </p>
+      <p class="hint">
         Esta página simula <code>chrome.storage.local</code> en memoria. Los errores de JS
         salen en la consola (F12).
       </p>
       <button id="reset" type="button">Reiniciar estado</button>
+      <infinite-scroller data-test-id="chat-history-container">
+        <p>Historial del chat (no debe tocarse)</p>
+      </infinite-scroller>
     </main>
 
     <script>
@@ -122,6 +157,22 @@
         for (const k of Object.keys(mem)) delete mem[k];
         location.reload();
       });
+
+      // Chats extra para que la lista desborde y haya que hacer scroll, como
+      // en Gemini (el sidebar real pinta ~30 y el resto va paginando).
+      const scroller = document.querySelector('bard-sidenav infinite-scroller');
+      for (let i = 0; i < 35; i++) {
+        const row = document.createElement('div');
+        row.setAttribute('data-test-id', 'conversation');
+        row.className = 'always-show-hovered-trailing-content';
+        row.innerHTML =
+          '<a class="mat-mdc-list-item gem-nav-list-item" href="/app/chat' +
+          String(i).padStart(3, '0') +
+          '?utm_medium=product_promo">Chat de prueba ' +
+          (i + 1) +
+          '</a>';
+        scroller.appendChild(row);
+      }
     </script>
     <script src="../lib.js"></script>
     <script src="../content.js"></script>

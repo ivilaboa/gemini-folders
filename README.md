@@ -3,7 +3,7 @@
 Extensión de Chrome (MV3) para **agrupar tus chats de Gemini en carpetas anidables,
 dentro del propio sidebar de Gemini**.
 
-- Árbol de carpetas (con subcarpetas) inyectado en el sidebar nativo.
+- Árbol de carpetas (con subcarpetas) inyectado en el sidebar nativo, **encima de la lista de chats**.
 - Arrastra chats del sidebar de Gemini o del propio árbol para meterlos en una carpeta.
 - Todo se guarda **en local** (`chrome.storage.local`). Sin servidor, sin cuentas, sin telemetría.
 - Exporta/importa un JSON para llevar tus carpetas a otra computadora.
@@ -58,8 +58,9 @@ sin carpeta.
   panel deja de poblarlo. Para diagnosticarlo, abre `tools/probe.js`, cópialo y pégalo en
   la consola de DevTools con Gemini abierto: devuelve el JSON con la estructura real del
   sidebar.
-- `tools/selftest.html` abre un mock del sidebar de Gemini con el script inyectado, para
-  probar la extensión sin cuenta de Google (abre el archivo con `file://` y revisa la consola).
+- `tools/selftest.html` abre un mock del sidebar de Gemini (misma estructura DOM que la real)
+  con el script inyectado, para probar la extensión sin cuenta de Google (abre el archivo con
+  `file://` y revisa la consola).
 
 ## Desarrollo
 

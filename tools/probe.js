@@ -9,20 +9,12 @@
  */
 (() => {
   const SEL = {
-    sidenav: ['bard-sidenav', 'bard-sidenav-container', '.sidebar-nav'],
-    mount: [
-      'bard-sidenav .sidenav-with-history-container',
-      'bard-sidenav .overflow-container',
-      'bard-sidenav',
-    ],
-    chatLinks: [
-      '[data-test-id="conversation"] > a[href*="/app/"]',
-      'a[data-test-id="conversation"][href*="/app/"]',
-      'a[href*="/app/"]:not([data-gf-row])',
-    ],
-    scroller: ['.recent-conversations-container', 'infinite-scroller'],
-    newChat: ['bard-sidenav .overflow-container gem-nav-list-item a', 'bard-sidenav a[href="/app"]'],
-    pageTitle: ['main [data-test-id="conversation-title"]', '[data-test-id="conversation-title"]'],
+    sidenav: ['bard-sidenav', 'bard-sidenav-container'],
+    mount: ['bard-sidenav .overflow-container', 'bard-sidenav .sidenav-with-history-container', 'bard-sidenav'],
+    chatLinks: ['[data-test-id="conversation"] > a[href*="/app/"]', 'bard-sidenav a[href*="/app/"]'],
+    scroller: ['bard-sidenav infinite-scroller', 'bard-sidenav .overflow-container infinite-scroller'],
+    newChat: ['bard-sidenav a[href="/app"]'],
+    pageTitle: ['[data-test-id="conversation-title"]'],
   };
 
   const count = (sel) => {
@@ -61,6 +53,7 @@
     chatSamples: [],
     scrollers: [],
     sidenavTree: null,
+    layout: [],
   };
 
   for (const [key, list] of Object.entries(SEL)) {
@@ -101,6 +94,55 @@
         if (out.scrollers.length > 8) break;
       }
     }
+  }
+
+  // --- layout: cómo se reparten los hijos dentro del sidebar -------------
+  // Con esto se decide dónde montar el árbol de carpetas sin romper el flex
+  // de Gemini (si el contenedor es flex, nuestro panel encoge el scroller; si
+  // no, hay que poner un tope manual).
+  const styleOf = (el) => {
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return {
+      tag: el.tagName.toLowerCase(),
+      class: String(el.className || '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 4),
+      testId: el.getAttribute('data-test-id') || undefined,
+      display: cs.display,
+      flexDirection: cs.flexDirection,
+      position: cs.position,
+      overflow: cs.overflow,
+      flex: cs.flex,
+      height: cs.height,
+      rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+    };
+  };
+
+  const chain = [
+    'bard-sidenav',
+    'side-navigation-content',
+    'bard-sidenav .sidenav-with-history-container',
+    'bard-sidenav .sidenav-header-buttons',
+    'bard-sidenav .overflow-container',
+  ];
+  for (const sel of chain) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    out.layout.push({ sel, ...styleOf(el), children: [...el.children].map((c) => styleOf(c)) });
+  }
+
+  const newChat = document.querySelector(SEL.newChat[0]);
+  if (newChat) {
+    const ancestors = [];
+    let cur = newChat;
+    while (cur && cur !== document.body) {
+      ancestors.push(styleOf(cur));
+      cur = cur.parentElement;
+    }
+    out.newChatAncestors = ancestors;
   }
 
   const text = JSON.stringify(out, null, 2);

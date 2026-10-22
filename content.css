@@ -47,12 +47,17 @@
 /* ---------------------------------------------------------------- panel */
 
 #gf-root {
+  /* Altura natural (sin márgenes) para poder encajar la lista de chats
+     debajo; flex-shrink 0 para que el contenedor no lo aplaste. */
+  flex: 0 0 auto;
   max-height: 40vh;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 8px 8px;
-  margin: 4px 0;
+  padding: 0 8px 8px;
+  margin: 0;
   border-bottom: 1px solid var(--gf-border, rgba(255, 255, 255, 0.12));
+  position: relative;
+  z-index: 2;
 }
 
 #gf-fallback {
@@ -76,9 +81,9 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 0 6px;
+  padding: 8px 0 6px;
   position: sticky;
-  top: -4px;
+  top: 0;
   background: var(--gf-bg, #1e1f20);
   z-index: 2;
 }

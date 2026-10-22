@@ -30,24 +30,25 @@
   // Selectores — con alternativas, porque Gemini rediseña su UI periódicamente.
   // =====================================================================
 
+  // Confirmado contra el DOM real (ver tools/probe.js):
+  //  - el chat vive en `<a href="/app/<id>?...">` dentro de `[data-test-id="conversation"]`
+  //  - la lista scrollea en `<bard-sidenav> <infinite-scroller>` (ya no hay
+  //    `.recent-conversations-container`)
+  //  - el botón de "Nueva conversación" es exactamente `a[href="/app"]`
   const SEL = {
-    sidenav: ['bard-sidenav', 'bard-sidenav-container', '.sidebar-nav'],
+    sidenav: ['bard-sidenav', 'bard-sidenav-container'],
     mount: [
-      'bard-sidenav .sidenav-with-history-container',
       'bard-sidenav .overflow-container',
+      'bard-sidenav .sidenav-with-history-container',
       'bard-sidenav',
     ],
     chatLinks: [
       '[data-test-id="conversation"] > a[href*="/app/"]',
-      'a[data-test-id="conversation"][href*="/app/"]',
-      'a[href*="/app/"]:not([data-gf-row])',
+      'bard-sidenav a[href*="/app/"]',
     ],
-    scroller: ['.recent-conversations-container', 'infinite-scroller'],
-    newChat: [
-      'bard-sidenav .overflow-container gem-nav-list-item a',
-      'bard-sidenav a[href="/app"]',
-    ],
-    pageTitle: ['main [data-test-id="conversation-title"]', '[data-test-id="conversation-title"]'],
+    scroller: ['bard-sidenav infinite-scroller', 'bard-sidenav .overflow-container infinite-scroller'],
+    newChat: ['bard-sidenav a[href="/app"]'],
+    pageTitle: ['[data-test-id="conversation-title"]'],
   };
 
   const $ = (list, root = document) => {
@@ -154,7 +155,9 @@
       const t = cleanTitle(elTitle.textContent);
       if (t) return t;
     }
-    return cleanTitle(document.title.replace(/\s*[-–|]\s*Gemini.*$/i, '')) || 'Chat sin título';
+    // Gemini titula la pestaña con el nombre del chat: "Mi chat - Google Gemini".
+    const t = cleanTitle(document.title.replace(/\s*[-–|]\s*(Google\s+)?Gemini.*$/i, ''));
+    return t || 'Chat sin título';
   }
 
   const chatUrl = (id) => `https://gemini.google.com/app/${id}`;
@@ -333,17 +336,41 @@
   // Navegación
   // =====================================================================
 
+  /**
+   * Gemini enruta los chats con Angular; un `.click()` sintético puede ser
+   * ignorado por los list-items de Material. Se dispara la secuencia de puntero
+   * completa, que es lo que el componente espera.
+   */
+  function activate(el) {
+    if (!el) return;
+    const opts = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      pointerType: 'mouse',
+      isPrimary: true,
+      button: 0,
+    };
+    try {
+      el.dispatchEvent(new PointerEvent('pointerdown', opts));
+      el.dispatchEvent(new PointerEvent('pointerup', opts));
+    } catch {
+      /* navegador sin PointerEvent */
+    }
+    el.click();
+  }
+
   function openChat(chatId) {
     const target = $$(SEL.chatLinks)
       .filter((a) => !inOurUI(a))
       .find((a) => chatIdFromHref(a.getAttribute('href')) === chatId);
     if (target) {
-      target.click();
+      activate(target);
       return;
     }
     // El chat no está en el DOM: Gemini sólo enruta si primero "soltamos" el chat actual.
     const newChat = $(SEL.newChat);
-    if (newChat) newChat.click();
+    if (newChat) activate(newChat);
     history.pushState({}, '', `/app/${chatId}`);
     dispatchEvent(new PopStateEvent('popstate'));
   }
@@ -361,9 +388,53 @@
     if (root && root.isConnected) return root;
     const host = $(SEL.mount);
     if (!host) return null;
+    const scroller = findScroller();
     root = el('div', { id: 'gf-root', 'data-gf-root': '1' });
-    host.insertBefore(root, host.firstChild);
+    // Va justo antes de la lista de chats: el árbol queda sobre los chats y
+    // debajo de la navegación de Gemini.
+    const anchor = hostChildWith(host, scroller);
+    host.insertBefore(root, anchor || host.firstChild);
+    fitScroller(scroller);
     return root;
+  }
+
+  /** Devuelve el hijo de `host` que contiene a `node` (null si no cuelga de él). */
+  function hostChildWith(host, node) {
+    if (!node) return null;
+    let cur = node;
+    while (cur && cur.parentElement && cur.parentElement !== host) cur = cur.parentElement;
+    return cur && cur.parentElement === host ? cur : null;
+  }
+
+  /**
+   * El sidebar de Gemini es una columna de altura fija: al añadir nuestro árbol
+   * hay que dejarle sitio a la lista de chats, o los últimos quedan fuera de
+   * la vista. Se mide el alto "natural" del scroller (sin nuestro panel) y se
+   * le pone un tope para que quepan los dos.
+   */
+  function fitScroller(scroller) {
+    if (!scroller || !root || !root.isConnected) return;
+    const host = root.parentElement;
+    const prevMax = scroller.style.maxHeight;
+    const prevDisplay = root.style.display;
+    // Medimos el alto natural sin nuestro panel Y sin el tope que pusimos
+    // nosotros: si no, cada llamada mide un scroller ya recortado y la lista
+    // se encoge hasta desaparecer.
+    scroller.style.maxHeight = '';
+    root.style.display = 'none';
+    let natural = scroller.clientHeight;
+    root.style.display = prevDisplay;
+    scroller.style.maxHeight = prevMax;
+
+    // El alto visible es el menor de la cadena de contenedores: un scroller
+    // block con 1400 chats no puede ser más alto que la columna que lo aloja.
+    for (let node = host; node && node !== document.body; node = node.parentElement) {
+      const h = node.getBoundingClientRect().height;
+      if (h > 0) natural = Math.min(natural, h);
+    }
+
+    const avail = natural - root.offsetHeight;
+    scroller.style.maxHeight = `${Math.max(120, avail)}px`;
   }
 
   function ensureLauncher() {
@@ -624,6 +695,7 @@
     if (statusMessage) {
       target.appendChild(el('div', { class: 'gf-status', role: 'status', text: statusMessage }));
     }
+    fitScroller(findScroller());
   }
 
   // =====================================================================
@@ -890,9 +962,12 @@
   // =====================================================================
 
   function findScroller() {
+    // El scroller real del sidebar: <bard-sidenav> <infinite-scroller>.
+    // Se acepta aunque todavía no scrollee (poco historial): scrollearlo es lo
+    // que dispara la paginación de Gemini.
     for (const sel of SEL.scroller) {
       const el = document.querySelector(sel);
-      if (el && el.scrollHeight > el.clientHeight + 8) return el;
+      if (el) return el;
     }
     const sidenav = $(SEL.sidenav);
     if (sidenav) {
@@ -1016,6 +1091,7 @@
     installObserver();
     installStorageListener();
     installRowHover();
+    window.addEventListener('resize', () => fitScroller(findScroller()));
 
     mergeHarvested();
     render();

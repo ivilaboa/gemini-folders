@@ -35,7 +35,19 @@ try {
 
   New-Item -ItemType Directory -Force -Path $outDir | Out-Null
   if (Test-Path $zip) { Remove-Item $zip }
-  Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
+  # Los nombres dentro del ZIP van con "/" (la Chrome Web Store rechaza "\").
+  Add-Type -AssemblyName System.IO.Compression
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [System.IO.Compression.ZipFile]::Open($zip, [System.IO.Compression.ZipArchiveMode]::Create)
+  try {
+    foreach ($file in $files) {
+      $entry = $archive.CreateEntry(($file -replace '\\', '/'), [System.IO.Compression.CompressionLevel]::Optimal)
+      $es = $entry.Open()
+      $fs = [System.IO.File]::OpenRead((Join-Path $stage $file))
+      try { $fs.CopyTo($es) } finally { $fs.Dispose(); $es.Dispose() }
+    }
+  }
+  finally { $archive.Dispose() }
 
   "{0}  ({1:N0} KB)" -f $zip, ((Get-Item $zip).Length / 1KB)
 }
