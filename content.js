@@ -210,12 +210,13 @@
     const ok = reads.filter((r) => r.data);
     if (!ok.length) return;
     let best = ok[0];
-    for (const r of ok) if (r.data.ts > best.data.ts) best = r;
+    for (const r of ok) if (GF.newer(r.data, best.data)) best = r;
     applyState(best.data);
     stateTs = best.data.ts;
     for (const r of ok) if (r.data.legacy) legacyAreas.add(r.area);
-    // Si la copia buena estaba en local, hay que empujarla a sync.
-    if (best.area !== AREAS[0]) save();
+    // Si la copia buena no estaba en sync, o viene del formato antiguo (sin
+    // marca de tiempo), hay que empujarla: se le pone ts y se replica.
+    if (best.area !== AREAS[0] || best.data.ts === 0) save();
   }
 
   let saveTimer = null;

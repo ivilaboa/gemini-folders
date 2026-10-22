@@ -136,6 +136,20 @@
       window.__gfAreas = areas;
       window.__gfMem = areas.local;
 
+      // El storage se guarda en localStorage para que sobreviva a las
+      // recargas (como el de la extensión real).
+      const STORE = 'gf-selftest-storage';
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORE) || '{}');
+        Object.assign(areas.local, saved.local || {});
+        Object.assign(areas.sync, saved.sync || {});
+      } catch {}
+      const persist = () => {
+        try {
+          localStorage.setItem(STORE, JSON.stringify(areas));
+        } catch {}
+      };
+
       const makeArea = (name) => ({
         name,
         get(keys) {
@@ -152,6 +166,7 @@
             changes[k] = { oldValue: data[k], newValue: v };
             data[k] = v;
           }
+          persist();
           for (const fn of listeners) fn(changes, name);
           return Promise.resolve();
         },
@@ -162,6 +177,7 @@
             changes[k] = { oldValue: data[k], newValue: undefined };
             delete data[k];
           }
+          persist();
           for (const fn of listeners) fn(changes, name);
           return Promise.resolve();
         },
@@ -178,6 +194,9 @@
         for (const area of Object.values(areas)) {
           for (const k of Object.keys(area)) delete area[k];
         }
+        try {
+          localStorage.removeItem(STORE);
+        } catch {}
         location.reload();
       });
 

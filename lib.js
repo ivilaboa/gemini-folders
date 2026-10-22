@@ -353,8 +353,11 @@
   /**
    * Escribe el estado en un área. `ts` es la marca de esta versión: al leer
    * gana la copia más reciente. Devuelve cuántos trozos tiene cada mapa.
+   *
+   * `prevCounts` sirve para borrar trozos que sobran; si no se pasa, se leen
+   * del propio área.
    */
-  GF.writeState = async (area, state, ts, prevCounts = {}) => {
+  GF.writeState = async (area, state, ts, prevCounts = null) => {
     const assign = GF.chunkMap(state.assign);
     const chats = GF.chunkMap(state.chats);
     const items = {
@@ -373,16 +376,41 @@
     });
 
     // Trozos que sobran de una versión anterior.
+    let before = prevCounts;
+    if (!before) {
+      const all = await area.get(null);
+      before = {
+        'gf.assign': typeof all['gf.assign.n'] === 'number' ? all['gf.assign.n'] : 0,
+        'gf.chats': typeof all['gf.chats.n'] === 'number' ? all['gf.chats.n'] : 0,
+      };
+    }
     const stale = [];
     for (const [prefix, count] of [
       ['gf.assign', assign.length],
       ['gf.chats', chats.length],
     ]) {
-      for (let i = count; i < prevCounts[prefix] || 0; i++) stale.push(`${prefix}.${i}`);
+      for (let i = count; i < before[prefix] || 0; i++) stale.push(`${prefix}.${i}`);
     }
     if (stale.length) await area.remove(stale);
     await area.set(items);
     return { 'gf.assign': assign.length, 'gf.chats': chats.length };
+  };
+
+  /**
+   * ¿Debe ganar la copia `a` sobre la `b`? Se compara la marca de tiempo; a
+   * igualdad gana la que tiene datos, para que un `sync` vacío no pise lo que
+   * hay en `local` (típico al subir desde una versión sin marca de tiempo).
+   */
+  GF.newer = (a, b) => {
+    if (!b) return true;
+    if (!a) return false;
+    if (a.ts !== b.ts) return a.ts > b.ts;
+    const weight = (s) =>
+      Object.keys(s.folders || {}).length +
+      Object.keys(s.assign || {}).length +
+      Object.keys(s.chats || {}).length +
+      Object.keys(s.rules || {}).length;
+    return weight(a) > weight(b);
   };
 
   GF.parseImport = (text) => {

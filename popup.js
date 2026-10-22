@@ -31,7 +31,7 @@
     );
     const ok = reads.filter(Boolean);
     let best = ok[0] || { ts: 0, folders: {}, assign: {}, chats: {}, rules: {} };
-    for (const s of ok) if (s.ts > best.ts) best = s;
+    for (const s of ok) if (GF.newer(s, best)) best = s;
     return best;
   }
 

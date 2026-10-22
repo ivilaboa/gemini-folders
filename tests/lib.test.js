@@ -308,6 +308,33 @@ test('writeState borra los trozos que sobran', async () => {
   assert.deepEqual(Object.keys(read.chats), ['c0']);
 });
 
+test('writeState borra los trozos viejos aunque no le digamos cuántos había', async () => {
+  const area = fakeArea();
+  const big = {};
+  for (let i = 0; i < 400; i++) big[`c${i}`] = { title: `título ${i}` };
+  await GF.writeState(area, { chats: big }, 1);
+  await GF.writeState(area, { chats: { c0: { title: 'x' } } }, 2);
+  assert.equal(area.data['gf.chats.1'], undefined, 'los trozos viejos deben desaparecer');
+});
+
+test('newer gana por marca de tiempo y, a igualdad, por contenido', () => {
+  const empty = { ts: 0, folders: {}, assign: {}, chats: {}, rules: {} };
+  const legacy = {
+    ts: 0,
+    folders: { f1: { name: 'Vieja' } },
+    assign: {},
+    chats: { c1: { title: 'x' } },
+    rules: {},
+  };
+  const nuevo = { ...empty, ts: 10 };
+  assert.equal(GF.newer(nuevo, legacy), true, 'la marca más reciente gana');
+  assert.equal(GF.newer(legacy, nuevo), false);
+  assert.equal(GF.newer(legacy, empty), true, 'a igualdad gana la que tiene datos');
+  assert.equal(GF.newer(empty, legacy), false);
+  assert.equal(GF.newer(legacy, null), true);
+  assert.equal(GF.newer(null, legacy), false);
+});
+
 (async () => {
   for (const item of queue) {
     if (item.section) {
