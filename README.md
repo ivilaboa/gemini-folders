@@ -5,7 +5,8 @@ dentro del propio sidebar de Gemini**.
 
 - Árbol de carpetas (con subcarpetas) inyectado en el sidebar nativo, **encima de la lista de chats**.
 - Arrastra chats del sidebar de Gemini o del propio árbol para meterlos en una carpeta.
-- Todo se guarda **en local** (`chrome.storage.local`). Sin servidor, sin cuentas, sin telemetría.
+- Todo se guarda **en el navegador** (`chrome.storage.local` como respaldo y `chrome.storage.sync`
+  para que viaje entre tus equipos). Sin servidor, sin cuentas, sin telemetría.
 - Exporta/importa un JSON para llevar tus carpetas a otra computadora.
 
 ## Instalar (uso personal)
@@ -34,6 +35,28 @@ dentro del propio sidebar de Gemini**.
 | Cargar todos los chats | Menú `⋮` del panel → *Cargar todos los chats* |
 | Auto-organizar | Menú `⋮` → *Añadir regla…* (expresión regular contra el título) y luego *Auto-organizar pendientes* |
 | Copia de seguridad | Botón de la extensión en la barra → *Exportar copia* / *Importar copia* |
+
+### Sincronización entre equipos
+
+El estado se guarda en dos sitios a la vez:
+
+- `chrome.storage.local`: respaldo en ese equipo.
+- `chrome.storage.sync`: la copia que sincroniza el navegador por su cuenta.
+
+**En Chrome**, la copia sincronizada viaja con tu cuenta de Google: instala la
+extensión en el otro equipo, con la misma cuenta, y las carpetas aparecerán
+solas (tarda unos segundos). En **Edge** la sincronización depende de la
+sincronización del propio perfil de Edge, que usa tu cuenta de Microsoft, no la
+de Google: puede no funcionar. En cualquier caso, el **exportar/importar JSON**
+sigue siendo el método que nunca falla.
+
+Detalles que conviene saber:
+
+- Si editas en los dos equipos a la vez, gana la versión más reciente (el resto
+  se sobrescribe). No hay historial de conflictos.
+- `sync` limita cada clave a 8 KB y el total a 100 KB, así que la extensión
+  parte los datos en trozos. Si aun así no cabe, todo queda guardado en
+  `local` y el panel avisa de que no se pudo sincronizar.
 
 ### Auto-organización por reglas
 

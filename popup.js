@@ -1,15 +1,15 @@
 /**
  * Gemini Folders — popup.
  *
- * El popup no habla con la pestaña: lee y escribe chrome.storage.local
- * directamente. El content script escucha chrome.storage.onChanged y se
+ * El popup no habla con la pestaña: lee y escribe el storage directamente
+ * (local + sync). El content script escucha chrome.storage.onChanged y se
  * repinta solo, así que importar desde aquí se refleja al instante.
  */
 (() => {
   'use strict';
 
   const GF = globalThis.GF;
-  const KEYS = ['gf.folders', 'gf.assign', 'gf.chats', 'gf.rules'];
+  const AREAS = [chrome.storage.sync, chrome.storage.local].filter(Boolean);
   const $ = (id) => document.getElementById(id);
 
   const say = (text, isError = false) => {
@@ -18,24 +18,47 @@
     msg.classList.toggle('error', isError);
   };
 
+  /** El estado más reciente entre las dos áreas (la de sync es la que viaja). */
+  async function currentState() {
+    const reads = await Promise.all(
+      AREAS.map(async (area) => {
+        try {
+          return await GF.readState(area);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const ok = reads.filter(Boolean);
+    let best = ok[0] || { ts: 0, folders: {}, assign: {}, chats: {}, rules: {} };
+    for (const s of ok) if (s.ts > best.ts) best = s;
+    return best;
+  }
+
+  async function writeState(state, currentTs) {
+    const ts = Math.max(Date.now(), currentTs + 1);
+    await Promise.all(AREAS.map((area) => GF.writeState(area, state, ts)));
+    return ts;
+  }
+
   async function refresh() {
-    const raw = await chrome.storage.local.get(KEYS);
-    const folders = Object.keys(raw['gf.folders'] || {}).length;
-    const chats = Object.keys(raw['gf.chats'] || {}).length;
-    const assigned = Object.keys(raw['gf.assign'] || {}).length;
-    const rules = Object.keys(raw['gf.rules'] || {}).length;
+    const state = await currentState();
+    const folders = Object.keys(state.folders || {}).length;
+    const chats = Object.keys(state.chats || {}).length;
+    const assigned = Object.keys(state.assign || {}).length;
+    const rules = Object.keys(state.rules || {}).length;
     $('stats').textContent =
       `${folders} carpeta(s) · ${assigned}/${chats} chat(s) asignados · ${rules} regla(s)`;
-    return raw;
+    return state;
   }
 
   async function exportBackup() {
-    const raw = await chrome.storage.local.get(KEYS);
+    const state = await currentState();
     const payload = GF.exportData({
-      folders: raw['gf.folders'],
-      assign: raw['gf.assign'],
-      chats: raw['gf.chats'],
-      rules: raw['gf.rules'],
+      folders: state.folders,
+      assign: state.assign,
+      chats: state.chats,
+      rules: state.rules,
     });
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -59,22 +82,17 @@
       say(err.message || 'Archivo inválido', true);
       return;
     }
-    const current = await chrome.storage.local.get(KEYS);
+    const current = await currentState();
     const merged = GF.mergeImport(
       {
-        folders: current['gf.folders'],
-        assign: current['gf.assign'],
-        chats: current['gf.chats'],
-        rules: current['gf.rules'],
+        folders: current.folders,
+        assign: current.assign,
+        chats: current.chats,
+        rules: current.rules,
       },
       incoming,
     );
-    await chrome.storage.local.set({
-      'gf.folders': merged.folders,
-      'gf.assign': merged.assign,
-      'gf.chats': merged.chats,
-      'gf.rules': merged.rules,
-    });
+    await writeState(merged, current.ts);
     await refresh();
     say('Copia importada y fusionada.');
   }

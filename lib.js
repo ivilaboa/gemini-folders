@@ -284,6 +284,107 @@
     return data;
   };
 
+  // =====================================================================
+  // Persistencia: local (respaldo) + sync (entre equipos)
+  // =====================================================================
+
+  /**
+   * chrome.storage.sync limita cada clave a 8 KB, así que los mapas grandes
+   * (chats, asignaciones) se parten en trozos de ~7 KB que se vuelven a unir
+   * al leer. `gf.<mapa>.n` guarda cuántos trozos hay.
+   */
+  GF.CHUNK_BYTES = 7000;
+
+  GF.chunkMap = (map, maxBytes = GF.CHUNK_BYTES) => {
+    const src = map && typeof map === 'object' ? map : {};
+    const chunks = [];
+    let cur = {};
+    let size = 2; // "{}"
+    for (const [key, value] of Object.entries(src)) {
+      const piece = `${JSON.stringify(key)}:${JSON.stringify(value)},`;
+      if (size + piece.length > maxBytes && Object.keys(cur).length) {
+        chunks.push(cur);
+        cur = {};
+        size = 2;
+      }
+      cur[key] = value;
+      size += piece.length;
+    }
+    chunks.push(cur);
+    return chunks;
+  };
+
+  GF.mergeChunks = (chunks) => {
+    const out = {};
+    for (const chunk of chunks || []) {
+      if (chunk && typeof chunk === 'object') Object.assign(out, chunk);
+    }
+    return out;
+  };
+
+  /** Lee el estado completo de un área de storage. */
+  GF.readState = async (area) => {
+    const all = await area.get(null);
+    const pick = (prefix) => {
+      const count = all[`${prefix}.n`];
+      if (typeof count !== 'number') {
+        // Formato antiguo: el mapa entero en una sola clave.
+        const legacy = all[prefix];
+        return legacy && typeof legacy === 'object' ? legacy : {};
+      }
+      const chunks = [];
+      for (let i = 0; i < count; i++) chunks.push(all[`${prefix}.${i}`]);
+      return GF.mergeChunks(chunks);
+    };
+    return {
+      ts: typeof all['gf.ts'] === 'number' ? all['gf.ts'] : 0,
+      folders: all['gf.folders'] || {},
+      ui: all['gf.ui'] || {},
+      rules: all['gf.rules'] || {},
+      assign: pick('gf.assign'),
+      chats: pick('gf.chats'),
+      // Claves del formato antiguo: se pueden borrar tras migrar.
+      legacy:
+        Boolean(all['gf.chats'] && typeof all['gf.chats'] === 'object') ||
+        Boolean(all['gf.assign'] && typeof all['gf.assign'] === 'object'),
+    };
+  };
+
+  /**
+   * Escribe el estado en un área. `ts` es la marca de esta versión: al leer
+   * gana la copia más reciente. Devuelve cuántos trozos tiene cada mapa.
+   */
+  GF.writeState = async (area, state, ts, prevCounts = {}) => {
+    const assign = GF.chunkMap(state.assign);
+    const chats = GF.chunkMap(state.chats);
+    const items = {
+      'gf.ts': ts,
+      'gf.folders': state.folders || {},
+      'gf.ui': state.ui || {},
+      'gf.rules': state.rules || {},
+      'gf.assign.n': assign.length,
+      'gf.chats.n': chats.length,
+    };
+    assign.forEach((chunk, i) => {
+      items[`gf.assign.${i}`] = chunk;
+    });
+    chats.forEach((chunk, i) => {
+      items[`gf.chats.${i}`] = chunk;
+    });
+
+    // Trozos que sobran de una versión anterior.
+    const stale = [];
+    for (const [prefix, count] of [
+      ['gf.assign', assign.length],
+      ['gf.chats', chats.length],
+    ]) {
+      for (let i = count; i < prevCounts[prefix] || 0; i++) stale.push(`${prefix}.${i}`);
+    }
+    if (stale.length) await area.remove(stale);
+    await area.set(items);
+    return { 'gf.assign': assign.length, 'gf.chats': chats.length };
+  };
+
   GF.parseImport = (text) => {
     let data;
     try {

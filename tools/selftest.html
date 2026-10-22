@@ -128,33 +128,56 @@
 
     <script>
       // ------------------------------------------------------------ shim
-      const mem = {};
+      // Dos áreas como las de la extensión real: local (respaldo) y sync
+      // (viaja entre equipos). Para simular "otra computadora" se escribe en
+      // window.__gfAreas.sync.
+      const areas = { local: {}, sync: {} };
       const listeners = [];
-      window.__gfMem = mem;
+      window.__gfAreas = areas;
+      window.__gfMem = areas.local;
+
+      const makeArea = (name) => ({
+        name,
+        get(keys) {
+          const data = areas[name];
+          const out = {};
+          const list = Array.isArray(keys) ? keys : keys ? [keys] : Object.keys(data);
+          for (const k of list) if (k in data) out[k] = data[k];
+          return Promise.resolve(out);
+        },
+        set(obj) {
+          const data = areas[name];
+          const changes = {};
+          for (const [k, v] of Object.entries(obj)) {
+            changes[k] = { oldValue: data[k], newValue: v };
+            data[k] = v;
+          }
+          for (const fn of listeners) fn(changes, name);
+          return Promise.resolve();
+        },
+        remove(keys) {
+          const data = areas[name];
+          const changes = {};
+          for (const k of [].concat(keys)) {
+            changes[k] = { oldValue: data[k], newValue: undefined };
+            delete data[k];
+          }
+          for (const fn of listeners) fn(changes, name);
+          return Promise.resolve();
+        },
+      });
+
       window.chrome = {
         storage: {
-          local: {
-            get(keys) {
-              const out = {};
-              const list = Array.isArray(keys) ? keys : keys ? [keys] : Object.keys(mem);
-              for (const k of list) if (k in mem) out[k] = mem[k];
-              return Promise.resolve(out);
-            },
-            set(obj) {
-              const changes = {};
-              for (const [k, v] of Object.entries(obj)) {
-                changes[k] = { oldValue: mem[k], newValue: v };
-                mem[k] = v;
-              }
-              for (const fn of listeners) fn(changes, 'local');
-              return Promise.resolve();
-            },
-          },
+          local: makeArea('local'),
+          sync: makeArea('sync'),
           onChanged: { addListener: (fn) => listeners.push(fn) },
         },
       };
       document.getElementById('reset').addEventListener('click', () => {
-        for (const k of Object.keys(mem)) delete mem[k];
+        for (const area of Object.values(areas)) {
+          for (const k of Object.keys(area)) delete area[k];
+        }
         location.reload();
       });
 

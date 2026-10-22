@@ -5,20 +5,19 @@ const assert = require('node:assert/strict');
 const GF = require('../lib.js');
 
 let passed = 0;
+const queue = [];
+
+/** Agrupa los tests para poder ejecutarlos en orden, con soporte async. */
+function section(name) {
+  queue.push({ section: name });
+}
 function test(name, fn) {
-  try {
-    fn();
-    passed++;
-    console.log(`  ok  ${name}`);
-  } catch (err) {
-    console.error(`FAIL  ${name}\n      ${err.message}`);
-    process.exitCode = 1;
-  }
+  queue.push({ name, fn });
 }
 
 const withFolders = (...folders) => Object.fromEntries(folders.map((f) => [f.id, f]));
 
-console.log('carpetas');
+section('carpetas');
 
 test('createFolder respeta el padre y el orden', () => {
   const a = GF.createFolder({}, 'Trabajo');
@@ -82,7 +81,7 @@ test('renameFolder ignora nombres vacíos', () => {
   assert.equal(GF.renameFolder(folders, 'a', 'Nuevo').a.name, 'Nuevo');
 });
 
-console.log('chats');
+section('chats');
 
 test('assignChat asigna y desasigna', () => {
   const assign = GF.assignChat({}, 'chat1', 'f1');
@@ -102,7 +101,7 @@ test('sortChats ordena por actividad reciente', () => {
   assert.deepEqual(GF.sortChats(chats, ['a', 'b', 'c']), ['b', 'c', 'a']);
 });
 
-console.log('reglas');
+section('reglas');
 
 test('applyRules crea la carpeta de la regla y no pisa lo manual', () => {
   const rules = { r1: { id: 'r1', name: 'Trabajo', pattern: 'proyecto', enabled: true } };
@@ -123,7 +122,7 @@ test('applyRules respeta enabled=false y regex inválida', () => {
   assert.equal(GF.compileRule({ pattern: '([' }), null);
 });
 
-console.log('import / export');
+section('import / export');
 
 test('exportData produce un payload versionado', () => {
   const payload = GF.exportData({ folders: { a: {} }, assign: {}, chats: {}, rules: {} });
@@ -169,7 +168,7 @@ test('applyRules recuerda la carpeta creada y no la duplica', () => {
   assert.equal(Object.keys(second.folders).length, 1, 'no debe crear una carpeta nueva');
 });
 
-console.log('seguridad');
+section('seguridad');
 
 test('isRiskyPattern bloquea backtracking catastrófico', () => {
   for (const bad of ['^(a+)+$', '(a*)*', '(.*)+', '(a|aa)+', '([a-z]+)*$', '(x+x+)+y']) {
@@ -229,4 +228,100 @@ test('validateImport acepta un payload sano', () => {
   assert.doesNotThrow(() => GF.validateImport(payload));
 });
 
-console.log(`\n${passed} pruebas OK`);
+section('storage (local + sync)');
+
+/** Área de storage falsa para probar la lectura/escritura por trozos. */
+const fakeArea = (name = 'fake') => {
+  const data = {};
+  return {
+    name,
+    data,
+    async get() {
+      return JSON.parse(JSON.stringify(data));
+    },
+    async set(items) {
+      Object.assign(data, items);
+    },
+    async remove(keys) {
+      for (const k of [].concat(keys)) delete data[k];
+    },
+  };
+};
+
+test('chunkMap parte los mapas grandes y no pierde nada', () => {
+  const map = {};
+  for (let i = 0; i < 400; i++) {
+    map[`chat${i}`] = { title: `Un título bastante largo número ${i}`, url: `https://gemini.google.com/app/c${i}` };
+  }
+  const chunks = GF.chunkMap(map, 7000);
+  assert.ok(chunks.length > 1, 'un mapa grande debe partirse');
+  for (const chunk of chunks) {
+    assert.ok(JSON.stringify(chunk).length <= 7000, 'cada trozo cabe en la clave');
+  }
+  assert.deepEqual(GF.mergeChunks(chunks), map);
+});
+
+test('mergeChunks une los trozos y tolera los que falten', () => {
+  assert.deepEqual(GF.mergeChunks([{ a: 1 }, { b: 2 }]), { a: 1, b: 2 });
+  assert.deepEqual(GF.mergeChunks([{ a: 1 }, null, undefined]), { a: 1 });
+  assert.deepEqual(GF.mergeChunks([]), {});
+});
+
+test('writeState + readState mantienen el estado (ida y vuelta)', async () => {
+  const area = fakeArea();
+  const state = {
+    folders: { f1: { id: 'f1', name: 'Trabajo', parentId: null, order: 1000 } },
+    assign: { c1: 'f1' },
+    chats: { c1: { title: 'hola', url: 'https://gemini.google.com/app/c1' } },
+    rules: { r1: { id: 'r1', name: 'n', pattern: 'hola' } },
+    ui: { collapsed: {}, showUnfiled: true, panelEnabled: true },
+  };
+  await GF.writeState(area, state, 1234);
+  const read = await GF.readState(area);
+  assert.equal(read.ts, 1234);
+  assert.deepEqual(read.folders, state.folders);
+  assert.deepEqual(read.assign, state.assign);
+  assert.deepEqual(read.chats, state.chats);
+  assert.deepEqual(read.rules, state.rules);
+});
+
+test('readState entiende el formato antiguo (mapa en una sola clave)', async () => {
+  const area = fakeArea();
+  area.data['gf.chats'] = { c1: { title: 'hola' } };
+  area.data['gf.assign'] = { c1: 'f1' };
+  const read = await GF.readState(area);
+  assert.deepEqual(read.chats, { c1: { title: 'hola' } });
+  assert.deepEqual(read.assign, { c1: 'f1' });
+  assert.equal(read.legacy, true, 'debe marcar el formato antiguo para borrarlo');
+});
+
+test('writeState borra los trozos que sobran', async () => {
+  const area = fakeArea();
+  const big = {};
+  for (let i = 0; i < 400; i++) big[`c${i}`] = { title: `título ${i}` };
+  const first = await GF.writeState(area, { chats: big }, 1);
+  assert.ok(first['gf.chats'] > 1);
+  const second = await GF.writeState(area, { chats: { c0: { title: 'x' } } }, 2, first);
+  assert.equal(second['gf.chats'], 1);
+  assert.equal(area.data['gf.chats.1'], undefined, 'los trozos viejos deben desaparecer');
+  const read = await GF.readState(area);
+  assert.deepEqual(Object.keys(read.chats), ['c0']);
+});
+
+(async () => {
+  for (const item of queue) {
+    if (item.section) {
+      console.log(item.section);
+      continue;
+    }
+    try {
+      await item.fn();
+      passed++;
+      console.log(`  ok  ${item.name}`);
+    } catch (err) {
+      console.error(`FAIL  ${item.name}\n      ${err.message}`);
+      process.exitCode = 1;
+    }
+  }
+  console.log(`\n${passed} pruebas OK`);
+})();

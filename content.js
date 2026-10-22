@@ -6,7 +6,8 @@
  *  2. Dibuja dentro de ese sidebar un árbol de carpetas y deja arrastrar chats
  *     (nativos o del propio árbol) dentro de ellas.
  *
- * Todo el estado vive en chrome.storage.local; no hay servidor ni backend.
+ * Todo el estado vive en el storage del navegador (local como respaldo y
+ * sync para viajar entre equipos); no hay servidor ni backend.
  */
 (() => {
   'use strict';
@@ -15,7 +16,6 @@
   window.__gfLoaded = true;
 
   const GF = globalThis.GF;
-  const KEYS = ['gf.folders', 'gf.assign', 'gf.chats', 'gf.ui', 'gf.rules'];
   const DRAG_MIME = 'application/x-gemini-folders';
 
   const state = {
@@ -173,68 +173,117 @@
   // Persistencia
   // =====================================================================
 
-  async function load() {
-    const raw = await chrome.storage.local.get(KEYS);
-    state.folders = raw['gf.folders'] || {};
-    state.assign = raw['gf.assign'] || {};
-    state.chats = raw['gf.chats'] || {};
-    state.rules = raw['gf.rules'] || {};
-    state.ui = { collapsed: {}, showUnfiled: true, panelEnabled: true, ...(raw['gf.ui'] || {}) };
+  /**
+   * El estado se guarda en dos áreas: `sync` (viaja solo entre equipos con la
+   * misma cuenta) y `local` (respaldo: si la sync falla, se queda con el
+   * navegador o no la sincroniza, no se pierde nada). Cada guardado lleva un
+   * `ts`; al leer, gana la copia más reciente.
+   */
+  const AREAS = [chrome.storage.sync, chrome.storage.local].filter(Boolean);
+
+  // Retardo para lo que no es una acción del usuario.
+  const SLOW_SAVE = 60000;
+
+  let stateTs = 0;
+  const chunkCounts = new Map();
+  const legacyAreas = new Set();
+
+  function applyState(data) {
+    state.folders = data.folders;
+    state.assign = data.assign;
+    state.chats = data.chats;
+    state.rules = data.rules;
+    state.ui = { collapsed: {}, showUnfiled: true, panelEnabled: true, ...(data.ui || {}) };
     state.ui.collapsed = state.ui.collapsed || {};
   }
 
-  let saveTimer = null;
-  let lastWritten = null;
+  async function load() {
+    const reads = await Promise.all(
+      AREAS.map(async (area) => {
+        try {
+          return { area, data: await GF.readState(area) };
+        } catch {
+          return { area, data: null };
+        }
+      }),
+    );
+    const ok = reads.filter((r) => r.data);
+    if (!ok.length) return;
+    let best = ok[0];
+    for (const r of ok) if (r.data.ts > best.data.ts) best = r;
+    applyState(best.data);
+    stateTs = best.data.ts;
+    for (const r of ok) if (r.data.legacy) legacyAreas.add(r.area);
+    // Si la copia buena estaba en local, hay que empujarla a sync.
+    if (best.area !== AREAS[0]) save();
+  }
 
-  function save() {
+  let saveTimer = null;
+
+  /**
+   * `delay` alto para lo que no es acción del usuario (el "última actividad"
+   * de un chat): sync tiene límite de escrituras por minuto y no queremos
+   * quemarlo con el ruido del harvest.
+   */
+  function save(delay = 200) {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
-      const payload = {
-        'gf.folders': state.folders,
-        'gf.assign': state.assign,
-        'gf.chats': state.chats,
-        'gf.ui': state.ui,
-        'gf.rules': state.rules,
-      };
-      lastWritten = payload;
-      chrome.storage.local.set(payload).catch((err) => {
-        flash(`No se pudo guardar: ${err && err.message ? err.message : err}`);
-      });
-    }, 200);
+      flush();
+    }, delay);
   }
 
-  const KEY_TO_STATE = {
-    'gf.folders': 'folders',
-    'gf.assign': 'assign',
-    'gf.chats': 'chats',
-    'gf.ui': 'ui',
-    'gf.rules': 'rules',
-  };
+  async function flush() {
+    const ts = Math.max(Date.now(), stateTs + 1);
+    stateTs = ts;
+    const results = await Promise.allSettled(
+      AREAS.map(async (area) => {
+        const counts = await GF.writeState(area, state, ts, chunkCounts.get(area.name) || {});
+        chunkCounts.set(area.name, counts);
+        if (legacyAreas.has(area)) {
+          legacyAreas.delete(area);
+          await area.remove(['gf.chats', 'gf.assign']).catch(() => {});
+        }
+      }),
+    );
+    const failed = results.find((r) => r.status === 'rejected');
+    if (failed) {
+      const err = failed.reason;
+      flash(`No se pudo guardar: ${err && err.message ? err.message : err}`);
+    }
+  }
 
   /**
-   * Aplica sólo las claves que vienen de fuera (otra pestaña o el popup).
-   * Las escrituras propias se ignoran: comparar evita la carrera en la que un
-   * `onChanged` pendiente pisa un cambio local que aún no se ha escrito.
+   * Aplica sólo las claves que vienen de fuera (otra pestaña, otra máquina o
+   * el popup). Las escrituras propias se ignoran: el `ts` no cambia.
    */
   function installStorageListener() {
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'local') return;
-      let external = false;
-      for (const [key, change] of Object.entries(changes)) {
-        const slot = KEY_TO_STATE[key];
-        if (!slot) continue;
-        if (
-          lastWritten &&
-          key in lastWritten &&
-          JSON.stringify(lastWritten[key]) === JSON.stringify(change.newValue)
-        ) {
-          continue; // es nuestra propia escritura
+    const pending = new Set();
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      const area = AREAS.find((a) => a.name === areaName);
+      if (!area || pending.has(areaName)) return;
+      pending.add(areaName);
+      setTimeout(async () => {
+        pending.delete(areaName);
+        let data;
+        try {
+          data = await GF.readState(area);
+        } catch {
+          return;
         }
-        state[slot] = change.newValue || {};
-        external = true;
-      }
-      if (external && !dragging) render();
+        if (!data || data.ts <= stateTs) return; // nuestra propia escritura
+        applyState(data);
+        stateTs = data.ts;
+        // Reenviar a las demás áreas con el MISMO ts: si no, los equipos se
+        // pisan en bucle.
+        for (const other of AREAS) {
+          if (other === area) continue;
+          GF.writeState(other, state, data.ts, chunkCounts.get(other.name) || {})
+            .then((counts) => chunkCounts.set(other.name, counts))
+            .catch(() => {});
+        }
+        if (!dragging) render();
+      }, 250);
     });
   }
 
@@ -1080,7 +1129,9 @@
       harvestTimer = setTimeout(() => {
         harvestTimer = null;
         if (mergeHarvested()) {
-          save();
+          // Ruido de fondo (actividad del chat abierto): se guarda con
+          // retardo para no gastar las escrituras de sync.
+          save(SLOW_SAVE);
           if (!dragging) render();
         }
       }, 1200);
